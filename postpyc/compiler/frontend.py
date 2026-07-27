@@ -28,7 +28,6 @@ from .ir import (
 )
 from .typechecker import (
     TypeError_PP,
-    resolve_annotation,
     resolve_annotation_info,
     infer_function,
     promote,
@@ -572,6 +571,16 @@ class FunctionLifter:
             if stmt.value is None:
                 return
             annotation = resolve_annotation_info(stmt.annotation)
+            if not annotation.is_supported:
+                # Without this the annotation is silently ignored and the
+                # local takes the value's inferred dtype instead.
+                self._compiler_error(
+                    stmt,
+                    "PP900",
+                    annotation.unsupported_reason
+                    or "this annotation is not lowered by this compiler yet",
+                )
+                return
             if (
                 annotation.is_array
                 and isinstance(stmt.target, ast.Name)
@@ -1057,7 +1066,19 @@ class FunctionLifter:
                     "`range()` is only supported as a `for` loop iterable",
                 )
                 return None
-            cast_dtype = resolve_annotation(ast.Name(id=name, ctx=ast.Load()))
+            cast_info = resolve_annotation_info(ast.Name(id=name, ctx=ast.Load()))
+            if not cast_info.is_supported and node.args:
+                # A dtype spelling this compiler cannot lower (e.g. Float16)
+                # used as a cast: diagnose the dtype rather than falling
+                # through to an unresolved-call-target error.
+                self._compiler_error(
+                    node,
+                    "PP900",
+                    cast_info.unsupported_reason
+                    or f"casts to `{name}` are not lowered by this compiler yet",
+                )
+                return None
+            cast_dtype = cast_info.dtype
             if cast_dtype is not None and node.args:
                 operand = self._lower_expr(node.args[0])
                 if operand is None:
@@ -1583,7 +1604,12 @@ def _collect_module_constants(tree: ast.Module, module: Module) -> None:
             if isinstance(node.target, ast.Name):
                 target = node.target.id
                 info = resolve_annotation_info(node.annotation)
-                if info.is_array or not info.is_valid or info.dtype is None:
+                if (
+                    info.is_array
+                    or not info.is_valid
+                    or not info.is_supported
+                    or info.dtype is None
+                ):
                     continue
                 annotated_dtype = info.dtype
         elif isinstance(node, ast.Assign) and len(node.targets) == 1:

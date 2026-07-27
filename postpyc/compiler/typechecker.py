@@ -112,6 +112,55 @@ def _unsupported_annotation(reason: str) -> ResolvedAnnotation:
     )
 
 
+# Dtypes that are valid POST Python but that this compiler cannot lower with
+# correct semantics.  Accepting them would violate the cardinal rule (reject
+# clearly rather than change behavior), so annotation resolution reports them
+# as unsupported and the frontend turns that into PP900.
+_UNSUPPORTED_DTYPES: dict[type[DType], str] = {
+    # The C backend has no native binary16 type and maps Float16 to uint16_t
+    # (c_backend._C_TYPE).  That is a correct 16-bit *container*, but nothing
+    # downstream knows the bits are a float, so arithmetic, comparison, and
+    # casts all operate on the bit pattern as an integer: `1.0 + 1.0` yields
+    # 32768.0 and `-2.0 < 1.0` yields False.  Reject until binary16 is lowered
+    # properly.  See https://github.com/openteams-ai/postpython/issues/44.
+    Float16: (
+        "`Float16` is valid POST Python but is not lowered by this compiler "
+        "yet: the C backend has no native binary16 type, so arithmetic would "
+        "be performed on integer bit patterns (postpython#44)"
+    ),
+}
+
+
+def _unsupported_dtype_reason(dtype: Optional[type[DType]]) -> Optional[str]:
+    """Reason ``dtype`` cannot be lowered, or None if it can."""
+    return _UNSUPPORTED_DTYPES.get(dtype) if dtype is not None else None
+
+
+def _unsupported_dtype_annotation(
+    dtype: type[DType],
+    reason: str,
+    *,
+    shape: Shape = AnyShape,
+    layout: ArrayLayout = COrder,
+    is_array: bool = False,
+) -> ResolvedAnnotation:
+    """Mark a resolvable dtype as un-lowerable, keeping the dtype itself.
+
+    Whether a spelling names a dtype (spec §4.1: `f16` and `Float16` are
+    interchangeable) is a separate question from whether this compiler can
+    lower it, so the dtype is retained and only ``is_supported`` is cleared.
+    """
+    return ResolvedAnnotation(
+        dtype=dtype,
+        shape=shape,
+        layout=layout,
+        is_array=is_array,
+        is_valid=True,
+        is_supported=False,
+        unsupported_reason=reason,
+    )
+
+
 def _is_schema_constructor(node: ast.expr, names: set[str]) -> bool:
     if not isinstance(node, ast.Call):
         return False
@@ -226,6 +275,11 @@ def resolve_annotation_info(node: ast.expr) -> ResolvedAnnotation:
             dtype = _resolve_dtype_expr(parts[0]) if parts else None
             if dtype is None:
                 return ResolvedAnnotation(dtype=None, is_array=True, is_valid=False)
+            element_reason = _unsupported_dtype_reason(dtype)
+            if element_reason is not None:
+                return _unsupported_dtype_annotation(
+                    dtype, element_reason, is_array=True
+                )
             shape = AnyShape
             layout: ArrayLayout = COrder
             if len(parts) == 2:
@@ -277,6 +331,9 @@ def resolve_annotation_info(node: ast.expr) -> ResolvedAnnotation:
 
     dtype = _resolve_dtype_expr(node)
     if dtype is not None:
+        reason = _unsupported_dtype_reason(dtype)
+        if reason is not None:
+            return _unsupported_dtype_annotation(dtype, reason)
         return ResolvedAnnotation(dtype=dtype)
     if isinstance(node, ast.Constant) and node.value is None:
         return ResolvedAnnotation(dtype=None, is_none=True)   # 'None' return type → void
