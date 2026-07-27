@@ -177,7 +177,7 @@ def test_pi_circumference_runtime():
         "    return 2.0 * PI * r\n",
         filename="circ.py",
     )))
-    circ = lib.circ
+    circ = lib.pp_circ
     circ.argtypes = [ctypes.c_double]
     circ.restype = ctypes.c_double
     assert circ(1.0) == 2.0 * math.pi
@@ -200,7 +200,7 @@ def test_module_scope_coefficient_table_pattern():
         "    return p\n",
         filename="poly.py",
     )))
-    poly = lib.poly
+    poly = lib.pp_poly
     poly.argtypes = [ctypes.c_double]
     poly.restype = ctypes.c_double
 
@@ -226,7 +226,7 @@ def test_cross_module_constant_runtime(tmp_path):
         "    return x * FACTOR + OFFSET\n"
     )
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(2.0) == 2.0 * 2.5 + 5.0

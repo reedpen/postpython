@@ -25,7 +25,7 @@ def dot(a: Array[Float64], b: Array[Float64], out: Array[Float64]) -> None:
 
     c_source = emit_c(source)
 
-    assert "void dot(__pp_array* _a, __pp_array* _b, __pp_array* _out, int64_t _pp_dim_n)" in c_source
+    assert "void __pp_dot(__pp_array* _a, __pp_array* _b, __pp_array* _out, int64_t _pp_dim_n)" in c_source
     assert "int64_t _pp_shape_0[1] = {_pp_dim_n};" in c_source
     # The view strides come from NumPy's inner (core-dimension) steps,
     # which follow the outer steps in the steps array: 3 args -> steps[3..].

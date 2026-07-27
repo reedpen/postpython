@@ -272,9 +272,9 @@ def test_emission_declares_externs_and_hides_privates(tmp_path):
     main_c = emit_module(modules[1], dep_modules=modules[1].dep_modules)
 
     # Private helpers get internal linkage in their own unit.
-    assert "static double _hidden(double _x)" in helper_c
+    assert "static double __pp__hidden(double _x)" in helper_c
     # The importer declares the dependency's public function extern...
-    assert "double double_it(double _x);" in main_c
+    assert "double __pp_double_it(double _x);" in main_c
     # ...but not the private one.
     assert "_hidden" not in main_c
 
@@ -339,7 +339,7 @@ def test_two_module_program_builds_and_runs(tmp_path):
         "    return double_it(double_it(x))\n"
     ))
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    quad = lib.quad
+    quad = lib.pp_quad
     quad.argtypes = [ctypes.c_double]
     quad.restype = ctypes.c_double
     assert quad(2.5) == 10.0
@@ -355,7 +355,7 @@ def test_import_alias_resolves_to_source_function(tmp_path):
         "    return twice(x)\n"
     ))
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(3.0) == 6.0
@@ -377,7 +377,7 @@ def test_imported_reserved_name_links_to_post_function_not_libm(tmp_path):
         "    return erfc(x)\n"
     ))
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(0.5) == 42.0
@@ -404,7 +404,7 @@ def test_vectorize_kernel_called_across_modules(tmp_path):
         "    return sigmoid(x) - 0.5\n"
     ))
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.centered
+    f = lib.pp_centered
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(0.0) == 0.0
@@ -438,7 +438,7 @@ def test_diamond_program_links_single_definition(tmp_path):
         "    return linc(x) + rinc(x)\n"
     ))
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(1.0) == (1.0 + 1.0) + (1.0 + 2.0)
@@ -464,7 +464,7 @@ def test_package_style_absolute_imports(tmp_path):
         "    return base(x) + 1.0\n"
     )
     lib = ctypes.CDLL(str(build_file(main, output=tmp_path / "out.so")))
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(2.0) == 7.0

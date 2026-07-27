@@ -104,7 +104,7 @@ def add_scalar(x: Array[Float64], y: Float64, out: Array[Float64]) -> None:
 
     assert isinstance(fn, UFuncIR)
     assert str(fn.ufunc_sig) == "(n),()->(n)"
-    assert "void add_scalar(__pp_array* _x, double _y, __pp_array* _out, int64_t _pp_dim_n)" in c_source
+    assert "void __pp_add_scalar(__pp_array* _x, double _y, __pp_array* _out, int64_t _pp_dim_n)" in c_source
 
 
 def test_guvectorize_requires_output_parameters():

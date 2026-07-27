@@ -255,7 +255,7 @@ def test_c_backend_unsigned_floor_div_uses_plain_division():
     )
     # The signed helper macro is defined in the preamble for any TU; what we
     # care about is that the unsigned function body does not call it.
-    body = c.split("uint64_t f(", 1)[1]
+    body = c.split("uint64_t __pp_f(", 1)[1]
     assert "__pp_floordiv_si(" not in body
 
 
@@ -300,6 +300,6 @@ def test_c_backend_float_pow_still_uses_libm_pow():
     )
     # Integer pow helpers are defined in the preamble unconditionally;
     # verify the float function body calls libm's pow, not the int helper.
-    body = c.split("double f(", 1)[1]
+    body = c.split("double __pp_f(", 1)[1]
     assert "pow(" in body
     assert "__pp_ipow" not in body

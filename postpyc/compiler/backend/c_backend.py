@@ -74,27 +74,21 @@ def c_value_type(v: Value | Param) -> str:
     return c_type(v.dtype)
 
 
-_RESERVED_C_SYMBOLS: frozenset[str] = frozenset({
-    # <math.h>
-    "acos", "asin", "atan", "atan2",
-    "cbrt", "ceil", "copysign", "cos", "cosh",
-    "erf", "erfc", "exp", "exp2", "expm1",
-    "fabs", "floor", "fma", "fmax", "fmin", "fmod", "frexp",
-    "gamma", "hypot", "j0", "j1",
-    "ldexp", "lgamma", "log", "log10", "log1p", "log2",
-    "modf", "nan", "nearbyint", "pow", "remainder", "rint", "round",
-    "sin", "sinh", "sqrt",
-    "tan", "tanh", "tgamma", "trunc",
-    "y0", "y1",
-    # <stdlib.h> / <string.h>
-    "abort", "abs", "atof", "atoi", "calloc", "div", "exit", "free",
-    "labs", "ldiv", "llabs", "lldiv", "malloc", "rand", "realloc",
-    "srand", "strlen",
-})
-
-
 def c_symbol(name: str) -> str:
-    return f"__pp_{name}" if name in _RESERVED_C_SYMBOLS else name
+    """Kernel symbol for a POST function name.
+
+    Every kernel is mangled, unconditionally.  POST source names are never
+    placed in the C global namespace, so they cannot collide with libc/libm
+    declarations.  Enumerating names to avoid does not work: the colliding
+    set varies by libc, libc version, platform, and C standard revision (the
+    C23 narrowing functions `fadd`/`fsub`/`fmul`/`fdiv` collide only on new
+    enough glibc), and it grows over time.  See postpython#48.
+
+    Kernel symbol names are implementation-defined per spec §9.1.1; the
+    supported ABI is the `pp_*` export symbols built in backend/abi.py,
+    which are unaffected by this mangling.
+    """
+    return f"__pp_{name}"
 
 
 # ---------------------------------------------------------------------------

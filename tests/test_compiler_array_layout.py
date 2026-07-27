@@ -169,7 +169,7 @@ def f(x: Array[Int64, Shape[2, 3]]) -> int:
     assert "int64_t const *shape;" in c_source
     assert "int64_t const *strides;" in c_source
     assert "int64_t offset_bytes;" in c_source
-    assert "int64_t f(__pp_array* _x)" in c_source
+    assert "int64_t __pp_f(__pp_array* _x)" in c_source
     assert "__pp_array_at(_x, int64_t" in c_source
 
 

@@ -139,15 +139,16 @@ def collect_exports(modules: list[Module]) -> tuple[list[Export], list[TypeError
 
     result = list(exports.values())
 
-    # The pp_* namespace must not collide with kernel symbols.
-    kernel_symbols = {
-        c_symbol(fn.name) for m in modules for fn in m.functions
-    }
+    # The `pp_` prefix is reserved for export symbols (spec §9.1.1).  Kernels
+    # are all mangled to `__pp_*`, so a `pp_`-prefixed source name can no
+    # longer produce a symbol-level clash — but it still claims a name in the
+    # reserved export namespace (`pp_foo` would export as `pp_pp_foo`), which
+    # the spec forbids outright.  Diagnose the reserved prefix directly.
     for export in result:
-        if export.c_symbol in kernel_symbols:
+        if export.python_name.startswith("pp_"):
             errors.append(_abi_error(
-                f"export symbol `{export.c_symbol}` collides with a "
-                "compiled function of the same name"
+                f"public name `{export.python_name}` uses the reserved `pp_` "
+                "prefix, which names the export ABI namespace (spec §9.1.1)"
             ))
     return result, errors
 

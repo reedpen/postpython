@@ -26,7 +26,7 @@ def test_signed_floor_div_matches_python_semantics():
         "def fdiv(a: Int64, b: Int64) -> Int64:\n"
         "    return a // b\n"
     )
-    fdiv = lib.fdiv
+    fdiv = lib.pp_fdiv
     fdiv.argtypes = [ctypes.c_int64, ctypes.c_int64]
     fdiv.restype = ctypes.c_int64
 
@@ -48,7 +48,7 @@ def test_integer_pow_preserves_full_int64_precision():
         "def ipow(a: Int64, b: Int64) -> Int64:\n"
         "    return a ** b\n"
     )
-    ipow = lib.ipow
+    ipow = lib.pp_ipow
     ipow.argtypes = [ctypes.c_int64, ctypes.c_int64]
     ipow.restype = ctypes.c_int64
 
@@ -71,7 +71,7 @@ def test_abs_int64_returns_unsigned_magnitude():
         "def myabs(x: Int64) -> Int64:\n"
         "    return abs(x)\n"
     )
-    myabs = lib.myabs
+    myabs = lib.pp_myabs
     myabs.argtypes = [ctypes.c_int64]
     myabs.restype = ctypes.c_int64
     assert myabs(-42) == 42
@@ -86,7 +86,7 @@ def test_abs_float64_returns_magnitude():
         "def myabs(x: Float64) -> Float64:\n"
         "    return abs(x)\n"
     )
-    myabs = lib.myabs
+    myabs = lib.pp_myabs
     myabs.argtypes = [ctypes.c_double]
     myabs.restype = ctypes.c_double
     assert myabs(-3.5) == 3.5
@@ -101,7 +101,7 @@ def test_chained_compare_evaluates_logical_and():
         "def in_range(x: Int64) -> Bool:\n"
         "    return 0 < x < 10\n"
     )
-    in_range = lib.in_range
+    in_range = lib.pp_in_range
     in_range.argtypes = [ctypes.c_int64]
     in_range.restype = ctypes.c_bool
     assert in_range(5) is True
@@ -120,10 +120,10 @@ def test_bool_and_or_short_circuit_at_c_level():
         "def either(a: Bool, b: Bool) -> Bool:\n"
         "    return a or b\n"
     )
-    both = lib.both
+    both = lib.pp_both
     both.argtypes = [ctypes.c_bool, ctypes.c_bool]
     both.restype = ctypes.c_bool
-    either = lib.either
+    either = lib.pp_either
     either.argtypes = [ctypes.c_bool, ctypes.c_bool]
     either.restype = ctypes.c_bool
 
@@ -140,7 +140,7 @@ def test_int_division_is_true_division():
         "def divide(a: Int64, b: Int64) -> Float64:\n"
         "    return a / b\n"
     )
-    divide = lib.divide
+    divide = lib.pp_divide
     divide.argtypes = [ctypes.c_int64, ctypes.c_int64]
     divide.restype = ctypes.c_double
 
@@ -162,7 +162,7 @@ def test_sequential_loops_reusing_variable_compile_and_run():
         "        total += i\n"
         "    return total\n"
     )
-    twice = lib.twice
+    twice = lib.pp_twice
     twice.argtypes = [ctypes.c_int64]
     twice.restype = ctypes.c_int64
     assert twice(5) == 2 * sum(range(5)) == 20
@@ -185,7 +185,7 @@ def test_loop_variable_shadowing_parameter_matches_python():
         "        total += n\n"
         "    return total\n"
     )
-    shadow = lib.shadow
+    shadow = lib.pp_shadow
     shadow.argtypes = [ctypes.c_int64]
     shadow.restype = ctypes.c_int64
     assert shadow(5) == reference(5) == 10
@@ -206,7 +206,7 @@ def test_walrus_assigns_and_returns_value():
         "        return y\n"
         "    return x\n"
     )
-    f = lib.f
+    f = lib.pp_f
     f.argtypes = [ctypes.c_double]
     f.restype = ctypes.c_double
     assert f(1.0) == reference(1.0) == 2.0
@@ -283,3 +283,39 @@ def test_gufunc_loop_honors_non_contiguous_core_steps():
         steps_list=[0, 0, 0, 16, 8],
     )
     assert out[0] == 1 + 3 + 5 + 7 == 16.0
+
+
+# ---------------------------------------------------------------------------
+# libc/libm name collisions (postpython#48)
+#
+# Kernel symbols are mangled unconditionally, so a POST function may carry any
+# name libc happens to use.  These names all failed to compile when kernels
+# were emitted unmangled unless the name appeared in a hand-maintained
+# allowlist.  The set is toolchain-dependent (the C23 narrowing functions
+# fadd/fsub/fmul/fdiv only exist on new enough glibc), which is why the fix is
+# to mangle rather than to enumerate.
+# ---------------------------------------------------------------------------
+
+@needs_cc
+@pytest.mark.parametrize("name", [
+    "fdiv",     # C23 narrowing division (glibc)
+    "fadd", "fsub", "fmul", "fsqrt",
+    "sqrtf",    # float variant of a <math.h> function
+    "acosh",    # in libm; the allowlist had acos but not acosh
+    "conj",     # <complex.h>
+    "isnan",
+    "lround",
+    "memcpy",   # <string.h>
+    "erf",      # was in the allowlist: must keep working
+])
+def test_libc_colliding_function_names_build_and_run(name):
+    lib = _build(
+        "from postyp import Int64\n"
+        f"def {name}(a: Int64, b: Int64) -> Int64:\n"
+        "    return a + b\n"
+    )
+    fn = getattr(lib, f"pp_{name}")
+    fn.argtypes = [ctypes.c_int64, ctypes.c_int64]
+    fn.restype = ctypes.c_int64
+
+    assert fn(2, 3) == 5

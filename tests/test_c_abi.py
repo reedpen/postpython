@@ -68,7 +68,7 @@ def test_export_set_mirrors_namespace():
     assert set(exports) == {"erf", "lgamma_like", "dot", "gammaln"}
     assert exports["erf"].kind == "ufunc"
     assert exports["erf"].c_symbol == "pp_erf"
-    assert exports["erf"].kernel_symbol == "__pp_erf"  # libm-mangled kernel
+    assert exports["erf"].kernel_symbol == "__pp_erf"  # kernels are always mangled
     assert exports["lgamma_like"].kind == "function"
     assert exports["gammaln"].kind == "alias"
     assert exports["gammaln"].alias_of == "lgamma_like"
@@ -90,7 +90,23 @@ def test_alias_chain_resolves():
         "outer = middle\n"
     )
     assert exports["outer"].alias_of == "base"
-    assert exports["outer"].kernel_symbol == "base"
+    assert exports["outer"].kernel_symbol == "__pp_base"
+
+
+def test_kernel_symbols_are_mangled_regardless_of_libc(tmp_path):
+    """postpython#48: every kernel is mangled, not just libc-colliding names.
+
+    Enumerating names to avoid cannot work — the colliding set varies by libc,
+    platform, and C standard revision — so `plain_name` is mangled too.
+    """
+    exports = _exports_for(
+        "from postyp import Float64\n"
+        "def plain_name(x: Float64) -> Float64:\n"
+        "    return x\n"
+    )
+    assert exports["plain_name"].kernel_symbol == "__pp_plain_name"
+    # The supported ABI symbol is unchanged by the mangling (spec §9.1.1).
+    assert exports["plain_name"].c_symbol == "pp_plain_name"
 
 
 def test_alias_to_private_is_diagnosed():
@@ -116,6 +132,7 @@ def test_export_collision_with_pp_named_function():
     assert errors == [], errors
     _, abi_errors = collect_exports([module])
     assert any(e.code == "PP501" for e in abi_errors)
+    assert any("reserved `pp_` prefix" in e.message for e in abi_errors)
 
 
 def test_cross_module_imports_export_under_local_names(tmp_path):
@@ -151,10 +168,10 @@ def test_wrapper_tu_delegates_to_kernel_symbols():
     assert "return __pp_erf(_x);" in c
     # gufunc wrapper forwards arrays and core dims, returns void.
     assert "void pp_dot(__pp_array* _a, __pp_array* _b, __pp_array* _out, int64_t _pp_dim_n)" in c
-    assert "dot(_a, _b, _out, _pp_dim_n);" in c
+    assert "__pp_dot(_a, _b, _out, _pp_dim_n);" in c
     # alias wrapper targets the aliased kernel.
     assert "double pp_gammaln(double _x)" in c
-    assert "return lgamma_like(_x);" in c
+    assert "return __pp_lgamma_like(_x);" in c
 
 
 def test_header_is_self_contained_and_documented():
@@ -208,7 +225,7 @@ def test_pp_symbols_bypass_libm_ambiguity(tmp_path):
     )
     lib = ctypes.CDLL(str(lib_path))
 
-    # `lib.erf` would fall through to libm (the POST kernel is __pp_erf);
+    # `lib.pp_erf` would fall through to libm (the POST kernel is __pp_erf);
     # `lib.pp_erf` is unambiguous — this is the Target 1 acceptance case.
     pp_erf = lib.pp_erf
     pp_erf.argtypes = [ctypes.c_double]

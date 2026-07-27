@@ -46,8 +46,9 @@ The same pipeline is available as a Python API:
 Every artifact defines `pp_<name>` wrapper symbols for its export set —
 the entry unit's public functions, its POST imports under their local
 names, and module-level aliases like `gammaln = lgamma`. Kernel symbol
-names underneath are implementation detail (libm-colliding names such as
-`j0` are mangled to `__pp_j0`); **`pp_j0` is the contract.**
+names underneath are implementation detail — every kernel is mangled to
+`__pp_<name>`, so a POST function may safely be named `j0`, `fdiv`, or
+anything else libc uses; **`pp_j0` is the contract.**
 
 **The header** (`--emit-header`) is self-contained C99: the
 `__pp_array` view struct (spec §9.2), one declaration per export with
